@@ -1,1 +1,1 @@
-# data_comparison_methods
+# synthetic-data-imbalanced-regression
