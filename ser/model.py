@@ -224,8 +224,7 @@ class ModelSelector:
                 print(f"Group {label} skipped (n={len(X)})")
             return self
 
-        if self.verbose:
-            print(f"\nTraining group {label} (n={len(X)})")
+        
 
         results = []
         y_true = Utils.to_numpy(y)
@@ -512,7 +511,7 @@ class SERRegressor:
       5) evaluation (Naive vs SER vs global Huber)
 
     Usage:
-        pipeline = SERPipeline(methode="A", verbose=True)
+        pipeline = SERPipeline(method="A", verbose=True)
         results = pipeline.run(X_train, y_train, X_test, y_test)
     """
 
@@ -523,13 +522,13 @@ class SERRegressor:
         "D": BiasVarianceSegmenter,
     }
 
-    def __init__(self, methode="A", min_group_n=50, verbose=True, segmenter_kwargs=None):
-        if methode not in self.SEGMENTERS:
+    def __init__(self, method="A", min_group_n=50, verbose=True, segmenter_kwargs=None):
+        if method not in self.SEGMENTERS:
             raise ValueError("Unknown method. Choose from: 'A', 'B', 'C', 'D'.")
-        self.methode = methode
+        self.method = method
         self.min_group_n = min_group_n
         self.verbose = verbose
-        self.segmenter = self.SEGMENTERS[methode](**(segmenter_kwargs or {}))
+        self.segmenter = self.SEGMENTERS[method](**(segmenter_kwargs or {}))
 
         self.global_model_: Optional[OLSModel] = None
         self.huber_global_: Optional[HuberModel] = None
@@ -541,7 +540,7 @@ class SERRegressor:
     # ---------------------------------------------------------
     def fit(self, X_train, y_train):
         if self.verbose:
-            print(f"\n{'=' * 30}\nPIPELINE - method {self.methode}\n{'=' * 30}")
+            print(f"\n{'=' * 30}\nPIPELINE - method {self.method}\n{'=' * 30}")
             print(f"Train: {len(X_train)}\n")
 
         X_train = pd.DataFrame(X_train).reset_index(drop=True)
@@ -604,7 +603,7 @@ class SERRegressor:
         ], ignore_index=True)
 
         if self.verbose:
-            print(f"\n{'=' * 30}\nFinal summary (test set) - method: {self.methode}\n{'=' * 30}")
+            print(f"\n{'=' * 30}\nFinal summary (test set) - method: {self.method}\n{'=' * 30}")
             print(df_all)
 
         return {
