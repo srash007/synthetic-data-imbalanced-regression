@@ -1,0 +1,77 @@
+"""Unified public API for metric computation and evaluation."""
+
+from .distribution import (
+    cramer_von_mises,
+    energy_distance,
+    jensen_shannon_divergence,
+    kl_divergence,
+    kolmogorov_smirnov,
+    wasserstein_distance,
+)
+from .evaluate import evaluate_models
+from .imbalance import (
+    f1_phi,
+    precision_phi,
+    rare_region_error,
+    recall_phi,
+    tail_coverage,
+    tail_mae,
+    tail_r2,
+    tail_rmse,
+    weighted_mae,
+    weighted_rmse,
+)
+from .regression import (
+    mae,
+    mape,
+    max_error,
+    median_absolute_error,
+    mse,
+    r2,
+    rmse,
+    smape,
+)
+from .statistical import (
+    bootstrap_confidence_interval,
+    cliffs_delta,
+    cohens_d,
+    friedman_test,
+    nemenyi_test,
+    paired_ttest,
+    wilcoxon_test,
+)
+
+__all__ = [
+    "mae",
+    "mse",
+    "rmse",
+    "r2",
+    "median_absolute_error",
+    "mape",
+    "smape",
+    "max_error",
+    "precision_phi",
+    "recall_phi",
+    "f1_phi",
+    "weighted_mae",
+    "weighted_rmse",
+    "tail_mae",
+    "tail_rmse",
+    "tail_r2",
+    "tail_coverage",
+    "rare_region_error",
+    "wasserstein_distance",
+    "kl_divergence",
+    "jensen_shannon_divergence",
+    "kolmogorov_smirnov",
+    "cramer_von_mises",
+    "energy_distance",
+    "paired_ttest",
+    "wilcoxon_test",
+    "friedman_test",
+    "nemenyi_test",
+    "bootstrap_confidence_interval",
+    "cohens_d",
+    "cliffs_delta",
+    "evaluate_models",
+]
