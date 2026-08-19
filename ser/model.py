@@ -538,7 +538,7 @@ class SERRegressor:
         self.alpha_: Optional[float] = None
 
     # ---------------------------------------------------------
-    def fit(self, X_train, y_train):
+    def fit(self, X_train, y_train,region_definition=None,):
         if self.verbose:
             print(f"\n{'=' * 30}\nPIPELINE - method {self.method}\n{'=' * 30}")
             print(f"Train: {len(X_train)}\n")
@@ -556,12 +556,32 @@ class SERRegressor:
         
 
         # 2) Segmentation
-        self.seg_ = self.segmenter.segment(X_train, y_train)
-        self.alpha_ = 0.05 * (self.seg_.up_thr - self.seg_.low_thr)
+        if region_definition is None:
 
-        idxL, idxC, idxU = self.seg_.idxL, self.seg_.idxC, self.seg_.idxU
+            # Native SER behaviour
+            self.seg_ = self.segmenter.segment(X_train, y_train)
+
+        else:
+
+            # Benchmark behaviour
+            self.seg_ = region_definition
+
+        self.alpha_ = 0.05 * (
+            self.seg_.upper_threshold -
+            self.seg_.lower_threshold
+        )
+
+        idxL = np.where(self.seg_.lower_mask)[0]
+        idxC = np.where(self.seg_.center_mask)[0]
+        idxU = np.where(self.seg_.upper_mask)[0]
+
         if self.verbose:
-            print(f"\nGroup sizes: Lower={len(idxL)} / Center={len(idxC)} / Upper={len(idxU)}")
+            print(
+                f"\nGroup sizes:"
+                f" Lower={len(idxL)}"
+                f" Center={len(idxC)}"
+                f" Upper={len(idxU)}"
+            )
 
         # 3) Train experts per group
         groups_config = {"Lower": (idxL, 0.10), "Center": (idxC, 0.50), "Upper": (idxU, 0.90)}

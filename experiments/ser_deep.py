@@ -27,17 +27,19 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
+from ser import SERRegressor
+import metrics as mt
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from ser import SERRegressor
-import metrics as mt
+
 
 RANDOM_SEED = 42
-DATASET_PATH = "datasets/bank8fm.csv"
-TARGET_COL = "rej"          # explicit target column (CpuSm.csv -> "usr")
+DATASET_PATH = "datasets/boston.csv"
+TARGET_COL = "HousValue"          # explicit target column (CpuSm.csv -> "usr")
 SEGMENTATION_METHOD = "D"   # method used in Part 1's single-model benchmark
 
 RESULTS_DIR = Path("results")
@@ -144,18 +146,14 @@ print("=== Distribution metrics (y_true vs OLS predictions) ===")
 print("Wasserstein:", mt.wasserstein_distance(y_true, y_pred_ols))
 print("KL divergence:", mt.kl_divergence(y_true, y_pred_ols))
 print("Jensen-Shannon:", mt.jensen_shannon_divergence(y_true, y_pred_ols))
-print("Kolmogorov-Smirnov:", mt.kolmogorov_smirnov(y_true, y_pred_ols))
-print("Cramer-von-Mises:", mt.cramer_von_mises(y_true, y_pred_ols))
-print("Energy distance:", mt.energy_distance(y_true, y_pred_ols))
+
 print()
 
 print("=== Distribution metrics (y_true vs SER predictions) ===")
 print("Wasserstein:", mt.wasserstein_distance(y_true, y_pred_ser))
 print("KL divergence:", mt.kl_divergence(y_true, y_pred_ser))
 print("Jensen-Shannon:", mt.jensen_shannon_divergence(y_true, y_pred_ser))
-print("Kolmogorov-Smirnov:", mt.kolmogorov_smirnov(y_true, y_pred_ser))
-print("Cramer-von-Mises:", mt.cramer_von_mises(y_true, y_pred_ser))
-print("Energy distance:", mt.energy_distance(y_true, y_pred_ser))
+
 print()
 
 # Per-model absolute error vectors for statistical comparisons
@@ -163,18 +161,6 @@ err_ols = np.abs(y_true - y_pred_ols)
 err_ser = np.abs(y_true - y_pred_ser)
 err_dummy = np.abs(y_true - np.mean(y_train))
 
-print("=== Statistical utilities (errors comparison) ===")
-print("Paired t-test:", mt.paired_ttest(err_ols, err_ser))
-print("Wilcoxon test:", mt.wilcoxon_test(err_ols, err_ser))
-print("Friedman test:", mt.friedman_test(err_ols, err_ser, err_dummy))
-print("Nemenyi test:", mt.nemenyi_test(err_ols, err_ser, err_dummy))
-print(
-    "Bootstrap CI:",
-    mt.bootstrap_confidence_interval(err_ols - err_ser, statistic="mean", n_bootstrap=500),
-)
-print("Cohen's d:", mt.cohens_d(err_ols, err_ser))
-print("Cliff's delta:", mt.cliffs_delta(err_ols, err_ser))
-print()
 
 print("=== High-level evaluation API ===")
 results = mt.evaluate_models(
