@@ -18,7 +18,7 @@ Architecture:
     method is an interchangeable strategy.
   - BlendedPredictor: applies the Lower <-> Center <-> Upper
     alpha-blending.
-  - SERPipeline: orchestrator (replaces the old run_pipeline function).
+  - SERRegressor: orchestrator, sklearn-style estimator (fit/predict).
 """
 
 from abc import ABC, abstractmethod
@@ -224,7 +224,8 @@ class ModelSelector:
                 print(f"Group {label} skipped (n={len(X)})")
             return self
 
-        
+        if self.verbose:
+            print(f"\nTraining group {label} (n={len(X)})")
 
         results = []
         y_true = Utils.to_numpy(y)
@@ -251,7 +252,9 @@ class ModelSelector:
         self.best_model_ = best_row["model"]
         self.best_metrics_ = {k: best_row[k] for k in ("name", "R2", "MAE", "RMSE")}
 
-        
+        if self.verbose:
+            print(df_perf[["name", "R2", "MAE", "RMSE"]])
+            print(f"Best model: {self.best_metrics_['name']}")
         return self
 
 
@@ -459,15 +462,16 @@ class BlendedPredictor:
     -> no information leakage.
     """
 
-    def __init__(self, global_model: OLSModel, seg: SegmentationResult,
+    def __init__(self, global_model: OLSModel, low_thr: float, up_thr: float,
                  group_models: Dict[str, Optional[BaseRegressionModel]], alpha: float):
         self.global_model = global_model
-        self.seg = seg
+        self.low_thr = low_thr
+        self.up_thr = up_thr
         self.group_models = group_models
         self.alpha = alpha
 
     def predict(self, X_test):
-        low_thr, up_thr, alpha = self.seg.low_thr, self.seg.up_thr, self.alpha
+        low_thr, up_thr, alpha = self.low_thr, self.up_thr, self.alpha
         y_hat_global = np.asarray(self.global_model.predict(X_test))
 
         mdl_C = self.group_models["Center"]
@@ -511,8 +515,12 @@ class SERRegressor:
       5) evaluation (Naive vs SER vs global Huber)
 
     Usage:
-        pipeline = SERPipeline(method="A", verbose=True)
-        results = pipeline.run(X_train, y_train, X_test, y_test)
+        model = SERRegressor("A", verbose=True)
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+
+        # or, in one call:
+        results = SERRegressor("A", verbose=True).run(X_train, y_train, X_test, y_test)
     """
 
     SEGMENTERS = {
@@ -538,7 +546,7 @@ class SERRegressor:
         self.alpha_: Optional[float] = None
 
     # ---------------------------------------------------------
-    def fit(self, X_train, y_train,region_definition=None,):
+    def fit(self, X_train, y_train, region_definition=None):
         if self.verbose:
             print(f"\n{'=' * 30}\nPIPELINE - method {self.method}\n{'=' * 30}")
             print(f"Train: {len(X_train)}\n")
@@ -548,40 +556,44 @@ class SERRegressor:
 
         # 1) Naive global model
         self.global_model_ = OLSModel().fit(X_train, y_train)
-        
+        if self.verbose:
+            print("\nGlobal model summary:")
+            print(self.global_model_.model.summary())
 
         y_hat_train_global = pd.Series(self.global_model_.predict(X_train))
         resid_global = (y_train - y_hat_train_global).reset_index(drop=True)
 
-        
+        # Global Huber model, kept as a comparison baseline
+        self.huber_global_ = HuberModel().fit(X_train, y_train)
 
         # 2) Segmentation
+        # NOTE: regardless of the source (native segmenter or an externally
+        # shared region_definition, e.g. for a fair SER vs SMOGN comparison),
+        # we normalize to plain float thresholds (low_thr_/up_thr_) right
+        # here. Nothing downstream (predict, alpha_) ever reads attributes
+        # off self.seg_ directly -- this is what fixes the AttributeError
+        # that used to happen when self.seg_ held a RegionDefinition instead
+        # of a SegmentationResult (different attribute names on each).
         if region_definition is None:
-
             # Native SER behaviour
             self.seg_ = self.segmenter.segment(X_train, y_train)
-
+            low_thr, up_thr = self.seg_.low_thr, self.seg_.up_thr
+            idxL, idxC, idxU = self.seg_.idxL, self.seg_.idxC, self.seg_.idxU
         else:
-
-            # Benchmark behaviour
+            # Benchmark behaviour: reuse an externally-computed RegionDefinition
+            # so SER and e.g. SMOGN are compared on the exact same region split.
             self.seg_ = region_definition
+            low_thr, up_thr = region_definition.lower_threshold, region_definition.upper_threshold
+            idxL = np.where(region_definition.lower_mask)[0]
+            idxC = np.where(region_definition.center_mask)[0]
+            idxU = np.where(region_definition.upper_mask)[0]
 
-        self.alpha_ = 0.05 * (
-            self.seg_.upper_threshold -
-            self.seg_.lower_threshold
-        )
-
-        idxL = np.where(self.seg_.lower_mask)[0]
-        idxC = np.where(self.seg_.center_mask)[0]
-        idxU = np.where(self.seg_.upper_mask)[0]
+        self.low_thr_ = low_thr
+        self.up_thr_ = up_thr
+        self.alpha_ = 0.05 * (up_thr - low_thr)
 
         if self.verbose:
-            print(
-                f"\nGroup sizes:"
-                f" Lower={len(idxL)}"
-                f" Center={len(idxC)}"
-                f" Upper={len(idxU)}"
-            )
+            print(f"\nGroup sizes: Lower={len(idxL)} / Center={len(idxC)} / Upper={len(idxU)}")
 
         # 3) Train experts per group
         groups_config = {"Lower": (idxL, 0.10), "Center": (idxC, 0.50), "Upper": (idxU, 0.90)}
@@ -604,7 +616,9 @@ class SERRegressor:
     # ---------------------------------------------------------
     def predict(self, X_test):
         X_test = pd.DataFrame(X_test).reset_index(drop=True)
-        blender = BlendedPredictor(self.global_model_, self.seg_, self.group_models_, self.alpha_)
+        blender = BlendedPredictor(
+            self.global_model_, self.low_thr_, self.up_thr_, self.group_models_, self.alpha_
+        )
         return blender.predict(X_test)
 
     # ---------------------------------------------------------
@@ -644,5 +658,3 @@ class SERRegressor:
         """Shortcut for fit + evaluate (equivalent to the old run_pipeline() function)."""
         self.fit(X_train, y_train)
         return self.evaluate(X_test, y_test)
-
-
